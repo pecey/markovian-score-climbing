@@ -137,7 +137,7 @@ def main(args):
         # Parameters of proposal distribution
         initial_mu, initial_log_sigma = onp.random.normal(size=(n_latent)), onp.random.normal(
             size=(n_latent))
-        msc = MSC(seed=42, mu=initial_mu, log_sigma=initial_log_sigma, n_latent=n_latent)
+        msc = MSC(seed=args.seed, mu=initial_mu, log_sigma=initial_log_sigma, n_latent=n_latent)
         mu, log_sigma = msc.msc(train_x, train_y, n_samples=args.n_samples, n_iterations = args.n_iterations)
         test_error = evaluate(test_x, test_y, mu, log_sigma)
         print(f"Test error: {test_error}")
@@ -149,5 +149,6 @@ if __name__ == "__main__":
     parser.add_argument('--n_samples', type=int, help='Number of samples to sample from proposal', default=10)
     parser.add_argument('--n_iterations', type=int, help='Number of gradient steps to run', default=10000)
     parser.add_argument('--n_experiments', type=int, help='Number of times to run the experiment', default=10)
+    parser.add_argument('--seed', type=int, help='Seed RNG', default=42)
     args = parser.parse_args()
     main(args)
