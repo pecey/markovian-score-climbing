@@ -9,7 +9,6 @@ from scipy.stats import norm as onorm
 from jax.experimental.optimizers import adam
 import argparse
 
-
 class MSC:
     def __init__(self, seed, mu, log_sigma, n_latent):
         self.seed = seed
@@ -38,8 +37,7 @@ class MSC:
 
     # Log of proposal distribution
     def log_proposal(self, z, mu, log_sigma):
-        return -0.5*(z-mu[:,None])**2/np.exp(2.*log_sigma[:,None]) - 0.5*np.log(2.*np.pi) - log_sigma[:,None]
-        #return np.sum(norm.logpdf(z, loc=mu.reshape(-1, 1), scale=np.exp(log_sigma).reshape(-1, 1)), axis=0)
+        return np.sum(norm.logpdf(z, loc=mu.reshape(-1, 1), scale=np.exp(log_sigma).reshape(-1, 1)), axis=0)
 
     # Log of the likelihood: log P(y|x, z)
     # SF : Survival Function = 1-CDF
@@ -47,8 +45,7 @@ class MSC:
     def log_likelihood(self, y, x, z):
         return np.sum(y * norm.logcdf(np.dot(x, z)) + (1 - y) * onorm.logsf(np.dot(x, z)), axis=0)
 
-        # Conditional Importance Sampling
-
+    # Conditional Importance Sampling
     def cis(self, z_old, n_samples, x, y):
         # Sample n examples and replace the first example using z_old
         z = self.sample_from_proposal(n_samples)
@@ -59,8 +56,8 @@ class MSC:
         # TODO: What should be the size of these arrays?
         # Size of log_w : (n_latent, 1)
         log_w = self.log_prior(z) + self.log_likelihood(y, x, z) - self.log_proposal(z, self.mu, self.log_sigma)
-        max_log_w = np.max(log_w)
-        shifted_w = np.exp(log_w - max_log_w)
+        max_log_w = onp.max(log_w)
+        shifted_w = onp.exp(log_w - max_log_w)
         importance_weights = shifted_w / np.sum(shifted_w)
 
         # Sample next conditional sample
@@ -77,9 +74,9 @@ class MSC:
 
     def step(self, step, importance_weights, z):
         value, gradient = jax.value_and_grad(self.objective, (2, 3))(importance_weights, z, self.mu, self.log_sigma)
-        learning_rate = self.step_size / float(step + 1)
-        self.mu = self.mu - learning_rate * gradient[0]
-        self.log_sigma = self.log_sigma - learning_rate * gradient[1]
+        #learning_rate = self.step_size / float(step + 1)
+        self.mu = self.mu - self.step_size * gradient[0]
+        self.log_sigma = self.log_sigma - self.step_size * gradient[1]
         return value
 
     def msc(self, train_x, train_y, n_samples = 10,  n_iterations = 10000, log_frequency = 500):
@@ -105,9 +102,9 @@ def train_test_split(features_data, target_data, test_percentage=0.1):
     n_examples = features_data.shape[0]
     n_test = int(n_examples * test_percentage)
 
-    all_indices = list(range(n_examples))
-    test_indices = onp.random.choice(all_indices, size=n_test)
-    train_indices = list(set(all_indices) - set(test_indices))
+    permuted_indices = onp.random.permutation(n_examples)
+    test_indices = permuted_indices[:n_test]
+    train_indices = permuted_indices[n_test:]
 
     train_x = features_data[train_indices]
     train_y = target_data[train_indices]
