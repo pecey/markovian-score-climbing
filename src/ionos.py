@@ -50,7 +50,8 @@ class MSC:
         # Sample n examples and replace the first example using z_old
         z = self.sample_from_proposal(n_samples)
         # Replace the first sample of every latent variable with the conditional sample
-        z = jax.ops.index_update(z, jax.ops.index[:, 0], z_old)
+        if z_old is not None:
+            z = jax.ops.index_update(z, jax.ops.index[:, 0], z_old)
 
         # Compute importance weights : w = p(z) p(y|z,x)/q(z)
         # TODO: What should be the size of these arrays?
@@ -60,9 +61,12 @@ class MSC:
         shifted_w = onp.exp(log_w - max_log_w)
         importance_weights = shifted_w / np.sum(shifted_w)
 
-        # Sample next conditional sample
-        j = self.sample_according_to_weights(importance_weights)
-        return z, z[:, j], importance_weights
+        if z_old is not None:
+            # Sample next conditional sample
+            j = self.sample_according_to_weights(importance_weights)
+            return z, z[:, j], importance_weights
+        else:
+            return z, None, importance_weights
 
     def objective(self, importance_weights, z, mu, log_sigma):
         return -np.sum(importance_weights * self.log_proposal(z, mu, log_sigma))
@@ -79,8 +83,8 @@ class MSC:
         self.log_sigma = self.log_sigma - self.step_size * gradient[1]
         return value
 
-    def msc(self, train_x, train_y, n_samples = 10,  n_iterations = 10000, log_frequency = 500):
-        conditional_sample = 0.1 * onp.random.normal(size=self.n_latent)
+    def approximate(self, train_x, train_y, n_samples = 10, n_iterations = 1000, log_frequency = 100, conditional_importance_sampling = False):
+        conditional_sample = None if not conditional_importance_sampling else onp.random.normal(size=self.n_latent)
         # opt_init, opt_update, get_params = adam(self.s)
         # opt_state = opt_init((self.mu, self.log_sigma))
         mu_ = []
@@ -130,6 +134,8 @@ def main(args):
 
     n_latent = features_data.shape[1]
 
+    conditional_importance_sampling = args.cis.lower() == "true"
+
     for i in range(args.n_experiments):
         # Train and test split
         (train_x, train_y), (test_x, test_y) = train_test_split(features_data, target_data)
@@ -138,7 +144,7 @@ def main(args):
         initial_mu, initial_log_sigma = onp.random.normal(size=n_latent), onp.random.normal(
             size=n_latent)
         msc = MSC(seed=args.seed, mu=initial_mu, log_sigma=initial_log_sigma, n_latent=n_latent)
-        mu, log_sigma, mu_history, log_sigma_history = msc.msc(train_x, train_y, n_samples=args.n_samples, n_iterations = args.n_iterations)
+        mu, log_sigma, mu_history, log_sigma_history = msc.approximate(train_x, train_y, n_samples=args.n_samples, n_iterations = args.n_iterations, conditional_importance_sampling=conditional_importance_sampling)
         mu_opt = np.mean(np.array(mu_history[-150:]), axis = 0)
         var_opt = np.diag(np.mean(np.exp(2 * np.array(log_sigma_history[-150:])), axis=0))
         test_error = evaluate(test_x, test_y, mu_opt, var_opt)
@@ -152,5 +158,6 @@ if __name__ == "__main__":
     parser.add_argument('--n_iterations', type=int, help='Number of gradient steps to run', default=10000)
     parser.add_argument('--n_experiments', type=int, help='Number of times to run the experiment', default=10)
     parser.add_argument('--seed', type=int, help='Seed RNG', default=42)
+    parser.add_argument('--cis', type=str, help='Whether to run conditional IS or IS', default="true")
     args = parser.parse_args()
     main(args)
