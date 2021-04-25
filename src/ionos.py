@@ -16,7 +16,7 @@ class MSC:
         self.key = random.PRNGKey(seed)
         self.mu = mu
         self.log_sigma = log_sigma
-        self.step_size = 0.05
+        self.step_size = 0.01
         self.n_latent = n_latent
 
     # Sample examples from proposal. Shape of output : (n_latent, n_samples)
@@ -38,7 +38,8 @@ class MSC:
 
     # Log of proposal distribution
     def log_proposal(self, z, mu, log_sigma):
-        return np.sum(norm.logpdf(z, loc=mu.reshape(-1, 1), scale=np.exp(log_sigma).reshape(-1, 1)), axis=0)
+        return -0.5*(z-mu[:,None])**2/np.exp(2.*log_sigma[:,None]) - 0.5*np.log(2.*np.pi) - log_sigma[:,None]
+        #return np.sum(norm.logpdf(z, loc=mu.reshape(-1, 1), scale=np.exp(log_sigma).reshape(-1, 1)), axis=0)
 
     # Log of the likelihood: log P(y|x, z)
     # SF : Survival Function = 1-CDF
@@ -137,11 +138,13 @@ def main(args):
         (train_x, train_y), (test_x, test_y) = train_test_split(features_data, target_data)
 
         # Parameters of proposal distribution
-        initial_mu, initial_log_sigma = onp.random.normal(size=(n_latent)), onp.random.normal(
-            size=(n_latent))
+        initial_mu, initial_log_sigma = onp.random.normal(size=n_latent), onp.random.normal(
+            size=n_latent)
         msc = MSC(seed=args.seed, mu=initial_mu, log_sigma=initial_log_sigma, n_latent=n_latent)
         mu, log_sigma, mu_history, log_sigma_history = msc.msc(train_x, train_y, n_samples=args.n_samples, n_iterations = args.n_iterations)
-        test_error = evaluate(test_x, test_y, np.mean(np.array(mu_history[-150:]), axis = 0), np.diag(np.mean(np.exp(2 * np.array(log_sigma_history[-150:])), axis=0)))
+        mu_opt = np.mean(np.array(mu_history[-150:]), axis = 0)
+        var_opt = np.diag(np.mean(np.exp(2 * np.array(log_sigma_history[-150:])), axis=0))
+        test_error = evaluate(test_x, test_y, mu_opt, var_opt)
         print(f"Test error: {test_error}")
 
 
