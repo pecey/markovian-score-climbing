@@ -16,7 +16,7 @@ class MSC:
         self.key = random.PRNGKey(seed)
         self.mu = mu
         self.log_sigma = log_sigma
-        self.step_size = 0.01
+        self.step_size = 0.05
         self.n_latent = n_latent
 
     # Sample examples from proposal. Shape of output : (n_latent, n_samples)
@@ -85,16 +85,19 @@ class MSC:
         conditional_sample = 0.1 * onp.random.normal(size=self.n_latent)
         # opt_init, opt_update, get_params = adam(self.s)
         # opt_state = opt_init((self.mu, self.log_sigma))
+        mu_ = []
+        log_sigma_ = []
         for k in range(n_iterations):
             z, conditional_sample, importance_weights = self.cis(conditional_sample, n_samples, train_x, train_y)
             # Compute derivative wrt mu and log_sigma
             # opt_state, value = self.step(k, opt_state, opt_update, importance_weights, z)
             value = self.step(k, importance_weights, z)
-
+            mu_.append(self.mu)
+            log_sigma_.append(self.log_sigma)
             if k % log_frequency == 0:
                 print(f"Iteration: {k}, Objective Value : {value}")
 
-        return self.mu, self.log_sigma
+        return self.mu, self.log_sigma, mu_, log_sigma_
 
 
 def train_test_split(features_data, target_data, test_percentage=0.1):
@@ -115,8 +118,7 @@ def train_test_split(features_data, target_data, test_percentage=0.1):
 
 
 # https://rpubs.com/cakapourani/variational-bayes-bpr
-def evaluate(x, y, mu, log_sigma):
-    variance = np.diag(np.exp(2 * log_sigma))
+def evaluate(x, y, mu, variance):
     predictive_prob = norm.cdf(np.dot(x, mu) / np.sqrt(1 + np.sum(np.dot(x, variance) * x, axis = 1)))
     prediction = (predictive_prob > 0.5).astype('float').reshape(-1, 1)
     test_error = 1 - np.sum(prediction == y) / len(y)
@@ -138,8 +140,8 @@ def main(args):
         initial_mu, initial_log_sigma = onp.random.normal(size=(n_latent)), onp.random.normal(
             size=(n_latent))
         msc = MSC(seed=args.seed, mu=initial_mu, log_sigma=initial_log_sigma, n_latent=n_latent)
-        mu, log_sigma = msc.msc(train_x, train_y, n_samples=args.n_samples, n_iterations = args.n_iterations)
-        test_error = evaluate(test_x, test_y, mu, log_sigma)
+        mu, log_sigma, mu_history, log_sigma_history = msc.msc(train_x, train_y, n_samples=args.n_samples, n_iterations = args.n_iterations)
+        test_error = evaluate(test_x, test_y, np.mean(np.array(mu_history[-150:]), axis = 0), np.diag(np.mean(np.exp(2 * np.array(log_sigma_history[-150:])), axis=0)))
         print(f"Test error: {test_error}")
 
 
