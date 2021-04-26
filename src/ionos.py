@@ -1,6 +1,6 @@
 import jax
 import jax.numpy as np
-from jax import random
+from jax import random, jit
 import matplotlib.pyplot as plt
 from jax.scipy.stats import norm
 import pickle as pkl
@@ -17,6 +17,7 @@ class MSC:
         self.log_sigma = log_sigma
         self.step_size = 0.01
         self.n_latent = n_latent
+        self.opt_init, self.opt_update, self.get_params = adam(self.step_size)
 
     # Sample examples from proposal. Shape of output : (n_latent, n_samples)
     def sample_from_proposal(self, n_samples):
@@ -76,24 +77,27 @@ class MSC:
     #     value, gradient = jax.value_and_grad(self.objective, (2, 3))(importance_weights, z, self.mu, self.log_sigma)
     #     return opt_update(step, gradient, opt_state), value
 
-    def step(self, step, importance_weights, z):
+    def step(self, step, importance_weights, z, opt_state):
         value, gradient = jax.value_and_grad(self.objective, (2, 3))(importance_weights, z, self.mu, self.log_sigma)
         #learning_rate = self.step_size / float(step + 1)
-        self.mu = self.mu - self.step_size * gradient[0]
-        self.log_sigma = self.log_sigma - self.step_size * gradient[1]
-        return value
+        # self.mu = self.mu - self.step_size * gradient[0]
+        # self.log_sigma = self.log_sigma - self.step_size * gradient[1]
+        opt_state = self.opt_update(step, gradient, opt_state)
+        return value, opt_state, self.get_params(opt_state)
 
     def approximate(self, train_x, train_y, n_samples = 10, n_iterations = 1000, log_frequency = 100, conditional_importance_sampling = False):
         conditional_sample = None if not conditional_importance_sampling else onp.random.normal(size=self.n_latent)
         # opt_init, opt_update, get_params = adam(self.s)
         # opt_state = opt_init((self.mu, self.log_sigma))
+        params = (self.mu, self.log_sigma)
+        opt_state = self.opt_init(params)
         mu_ = []
         log_sigma_ = []
         for k in range(n_iterations):
             z, conditional_sample, importance_weights = self.cis(conditional_sample, n_samples, train_x, train_y)
             # Compute derivative wrt mu and log_sigma
             # opt_state, value = self.step(k, opt_state, opt_update, importance_weights, z)
-            value = self.step(k, importance_weights, z)
+            value, opt_state, (self.mu, self.log_sigma) = self.step(k, importance_weights, z, opt_state)
             mu_.append(self.mu)
             log_sigma_.append(self.log_sigma)
             if k % log_frequency == 0:
