@@ -85,8 +85,8 @@ class MSC:
         opt_state = self.opt_update(step, gradient, opt_state)
         return value, opt_state, self.get_params(opt_state)
 
-    def approximate(self, train_x, train_y, n_samples = 10, n_iterations = 1000, log_frequency = 100, conditional_importance_sampling = False):
-        conditional_sample = None if not conditional_importance_sampling else onp.random.normal(size=self.n_latent)
+    def approximate(self, train_x, train_y, n_samples = 10, n_iterations = 1000, log_frequency = 100, conditional_importance_sampling = False, random_init = True):
+        conditional_sample = None if not conditional_importance_sampling else (onp.random.normal(size=self.n_latent) if random_init else 0.1 * onp.random.normal(size = self.n_latent))
         # opt_init, opt_update, get_params = adam(self.s)
         # opt_state = opt_init((self.mu, self.log_sigma))
         params = (self.mu, self.log_sigma)
@@ -139,14 +139,19 @@ def main(args):
     n_latent = features_data.shape[1]
 
     conditional_importance_sampling = args.cis.lower() == "true"
+    random_init = args.random_init.lower() == "true"
 
     for i in range(args.n_experiments):
         # Train and test split
         (train_x, train_y), (test_x, test_y) = train_test_split(features_data, target_data)
 
-        # Parameters of proposal distribution
-        initial_mu, initial_log_sigma = onp.random.normal(size=n_latent), onp.random.normal(
-            size=n_latent)
+        if random_init:
+            # Parameters of proposal distribution
+            initial_mu, initial_log_sigma = onp.random.normal(size=n_latent), onp.random.normal(
+                size=n_latent)
+        else:
+            initial_mu, initial_log_sigma = 0.1 * onp.random.normal(size=n_latent), 0.5 + 0.1 * onp.random.normal(
+                size=n_latent)
         msc = MSC(seed=args.seed, mu=initial_mu, log_sigma=initial_log_sigma, n_latent=n_latent)
         mu, log_sigma, mu_history, log_sigma_history = msc.approximate(train_x, train_y, n_samples=args.n_samples, n_iterations = args.n_iterations, conditional_importance_sampling=conditional_importance_sampling)
         mu_opt = np.mean(np.array(mu_history[-150:]), axis = 0)
@@ -163,5 +168,6 @@ if __name__ == "__main__":
     parser.add_argument('--n_experiments', type=int, help='Number of times to run the experiment', default=10)
     parser.add_argument('--seed', type=int, help='Seed RNG', default=42)
     parser.add_argument('--cis', type=str, help='Whether to run conditional IS or IS', default="true")
+    parser.add_argument('--random_init', type=str, help='Whether to run with random initialization or initialization in paper', default="true")
     args = parser.parse_args()
     main(args)
