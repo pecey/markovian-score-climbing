@@ -141,6 +141,8 @@ def main(args):
     conditional_importance_sampling = args.cis.lower() == "true"
     random_init = args.random_init.lower() == "true"
 
+    print(f"Arguments: {args}, CIS: {conditional_importance_sampling}, Random Init: {random_init}")
+
     for i in range(args.n_experiments):
         # Train and test split
         (train_x, train_y), (test_x, test_y) = train_test_split(features_data, target_data)
