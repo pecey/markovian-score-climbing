@@ -131,12 +131,15 @@ def evaluate(x, y, mu, variance):
     return test_error
 
 def main(args):
+    augment_bias = args.augment_bias.lower() == "true"
     # Read in the data
     features_col = range(0, 13)
     target_col = 13
 
     raw_features = onp.genfromtxt(args.file_path, missing_values='?', delimiter=',', usecols=features_col)
     features_data = raw_features[~onp.isnan(raw_features).any(axis=1)]
+    if augment_bias:
+        features_data = np.insert(features_data, 0, 1, axis=1)
     target_data = onp.genfromtxt(args.file_path, delimiter=',', usecols=target_col)
     target_data = (target_data > 0).astype('float').reshape(-1, 1)
 
@@ -175,5 +178,6 @@ if __name__ == "__main__":
     parser.add_argument('--seed', type=int, help='Seed RNG', default=42)
     parser.add_argument('--cis', type=str, help='Whether to run conditional IS or IS', default="true")
     parser.add_argument('--random_init', type=str, help='Whether to run with random initialization or initialization in paper', default="true")
+    parser.add_argument('--augment_bias', type=str, help='Append extra feature to include the bias term', default="false")
     args = parser.parse_args()
     main(args)
