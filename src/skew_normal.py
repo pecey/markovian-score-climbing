@@ -1,10 +1,9 @@
 import jax
 import jax.numpy as np
 from jax import random
-import matplotlib.pyplot as plt
 from jax.scipy.stats import norm
-import pickle as pkl
-from jax.experimental.optimizers import adam
+import argparse
+import numpy as onp
 
 # Parameters of true distribution
 location, scale, shape = 0.5, 2., 5.
@@ -19,10 +18,6 @@ def log_p(x):
 delta = shape / np.sqrt(1 + shape ** 2)
 expected_mean = location + scale * delta * np.sqrt(2 / np.pi)
 expected_variance = scale ** 2 * (1 - (2 * delta ** 2 / np.pi))
-
-# Parameters of proposal distribution
-mu, log_sigma = expected_mean, np.log(np.sqrt(expected_variance))
-print(f"Initial parameters : Mu : {mu}, Log sigma : {log_sigma}")
 
 
 class MSC:
@@ -56,8 +51,9 @@ class MSC:
     def cis(self, z_old, n_samples):
         # Sample n examples and replace the first example using z_old
         z = self.sample_from_proposal(n_samples)
-        # JAX equivalent of z[0]=z_old
-        z = jax.ops.index_update(z, 0, z_old)
+        if z_old is not None:
+            # JAX equivalent of z[0]=z_old
+            z = jax.ops.index_update(z, 0, z_old)
 
         # Compute importance weights.
         log_w = self.log_p(z) - self.log_q(z, self.mu, self.log_sigma)
@@ -65,18 +61,21 @@ class MSC:
         shifted_w = np.exp(log_w - max_log_w)
         importance_weights = shifted_w / np.sum(shifted_w)
 
-        # Sample next conditional sample
-        j = self.sample_according_to_weights(importance_weights)
-        return z, z[j], importance_weights
+        if z_old is not None:
+            # Sample next conditional sample
+            j = self.sample_according_to_weights(importance_weights)
+            return z, z[j], importance_weights
+        else:
+            return z, None, importance_weights
 
     def objective(self, importance_weights, z, mu, log_sigma):
         return -np.sum(importance_weights * self.log_q(z, mu, log_sigma))
 
-    def approximate(self):
-        log_frequency = 500
+    def approximate(self, cis = True, random_init = True):
+        log_frequency = 5000
         n_iterations = 1000000
         n_samples = 2
-        conditional_sample = 0
+        conditional_sample = 0 if cis else None
         for k in range(n_iterations):
             z, conditional_sample, importance_weights = self.cis(conditional_sample, n_samples)
             # Compute derivative wrt mu and log_sigma
@@ -87,7 +86,20 @@ class MSC:
             if k % log_frequency == 0:
                 print(f"Iteration: {k}, Mean: {self.mu}, Log Sigma: {self.log_sigma}")
 
+def main(args):
+    cis = args.cis.lower() == "true"
+    # Parameters of proposal distribution
+    # mu, log_sigma = expected_mean, np.log(np.sqrt(expected_variance))
+    # print(f"Initial parameters : Mu : {mu}, Log sigma : {log_sigma}")
+    onp.random.seed(args.seed)
+    mu, log_sigma = onp.random.random(), onp.random.random()
+    alg = MSC(args.seed, log_p, mu, log_sigma)
+    alg.approximate(cis = cis)
 
 if __name__ == "__main__":
-    alg = MSC(42, log_p, mu, log_sigma)
-    alg.approximate()
+    parser = argparse.ArgumentParser(description='Process some integers.')
+    parser.add_argument('--cis', type=str, help='Whether to run conditional IS or IS', default="true")
+    parser.add_argument('--seed', type=int, help='Seed RNG', default=42)
+    args = parser.parse_args()
+    main(args)
+
