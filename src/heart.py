@@ -118,7 +118,7 @@ class MSC:
             if k % log_frequency == 0:
                 value = self.objective(importance_weights, z, mu, log_sigma)
                 print(f"Iteration: {k}, Objective Value : {value}")
-                
+
         return mu, log_sigma, mu_, log_sigma_
 
 
